@@ -1,7 +1,10 @@
 import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import * as path from "node:path";
 
-const child = spawn("node", ["dist/index.cjs"], {
-  cwd: "/home/nish/Projects/skills-mcp",
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const child = spawn(process.execPath, ["dist/index.cjs"], {
+  cwd: projectRoot,
   stdio: ["pipe", "pipe", "pipe"],
 });
 
