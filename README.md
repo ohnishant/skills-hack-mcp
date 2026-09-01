@@ -87,6 +87,28 @@ instructions returned by `load-skills`.
 - `npm run build` (esbuild -> dist/index.cjs)
 - `npm test` (test/client.mjs, an end-to-end stdio session against the built bundle)
 
+## Releases
+
+`.github/workflows/release.yml` builds on a `v*` tag push, runs typecheck, build,
+and test, then packages `dist/index.cjs` as `skills-mcp-<tag>.cjs` plus a `.cjs.gz`
+and `SHA256SUMS.txt`, and attaches them to a release.
+
+Push a tag to release:
+
+```
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+It can also run manually (Actions -> release -> Run workflow), optionally passing a
+tag name; otherwise it derives one from `package.json` and creates the release at
+the current commit.
+
+Tag pushes skip packaging and release steps when nothing meaningful changed since
+the previous release. GitHub ignores `paths` filters for tag pushes, so this is a
+diff inside the job against the prior tag. Meaningful paths: `src/`, `skills/`,
+`package.json`, `package-lock.json`, `tsconfig.json`, and the workflow itself.
+Manual runs always release.
+
 Source lives in `src/`:
 
 - `src/mcp/protocol.ts` minimal spec-correct MCP stdio server (JSON-RPC framing,

@@ -4,15 +4,29 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (defaults to v<package.json version>)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
+
+# GitHub evaluates push event paths filters only for branch pushes, not tag
+# pushes. The meaningful-changes check below therefore runs inside the job:
+# tag pushes where nothing under src/ or the build inputs changed since the
+# previous release skip the packaging and release steps. Manual dispatches
+# build and release regardless; an explicit trigger is intent enough.
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -27,17 +41,49 @@ jobs:
           npm run build
           npm test
 
-      - name: Package artifacts
+      - name: Detect meaningful changes (tag pushes only)
+        id: meaningful
+        if: github.event_name == 'push'
         run: |
           set -euo pipefail
+          PREV_TAG="$(git tag --sort=v:refname | tail -2 | head -1 || true)"
+          if [ -z "$PREV_TAG" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "No previous release tag; treating as meaningful."
+            exit 0
+          fi
+          PATHS='src/** package.json package-lock.json tsconfig.json .github/workflows/** skills/**'
+          CHANGED="$(git diff --name-only "$PREV_TAG"..HEAD -- $PATHS || true)"
+          if [ -n "$CHANGED" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            printf '%s\n' "Meaningful files changed since $PREV_TAG:" "$CHANGED"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No meaningful changes since $PREV_TAG."
+          fi
+
+      - name: Package artifacts
+        if: github.event_name == 'workflow_dispatch' || steps.meaningful.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ -n "${{ inputs.tag }}" ]; then
+              TAG="${{ inputs.tag }}"
+            else
+              TAG="v$(node -e "console.log(JSON.parse(require('node:fs').readFileSync('package.json','utf8')).version)")"
+            fi
+          fi
           mkdir -p release-assets
-          cp dist/index.cjs "release-assets/skills-mcp-${GITHUB_REF_NAME}.cjs"
-          gzip -9 -k "release-assets/skills-mcp-${GITHUB_REF_NAME}.cjs"
+          cp dist/index.cjs "release-assets/skills-mcp-${TAG}.cjs"
+          gzip -9 -k "release-assets/skills-mcp-${TAG}.cjs"
           cd release-assets
           sha256sum skills-mcp-*.cjs* > SHA256SUMS.txt
           ls -la
+          echo "tag=${TAG}" >> "$GITHUB_ENV"
 
       - name: Create release
+        if: github.event_name == 'workflow_dispatch' || steps.meaningful.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" release-assets/* --generate-notes
+        run: gh release create "$TAG" release-assets/* --target "$GITHUB_SHA" --generate-notes
