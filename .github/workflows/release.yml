@@ -46,7 +46,10 @@ jobs:
         if: github.event_name == 'push'
         run: |
           set -euo pipefail
-          PREV_TAG="$(git tag --sort=v:refname | tail -2 | head -1 || true)"
+          # HEAD is the just-pushed tag, so the baseline is the newest tag
+          # before it. Exclude the current tag to avoid comparing a tag to
+          # itself (tail alone would return the pushed tag on a solo run).
+          PREV_TAG="$(git tag --sort=v:refname | grep -v "^${GITHUB_REF_NAME}$" | tail -1 || true)"
           if [ -z "$PREV_TAG" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "No previous release tag; treating as meaningful."
