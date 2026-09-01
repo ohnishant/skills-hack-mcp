@@ -83,7 +83,7 @@ jobs:
           cd release-assets
           sha256sum skills-mcp-*.cjs* > SHA256SUMS.txt
           ls -la
-          echo "tag=${TAG}" >> "$GITHUB_ENV"
+          echo "TAG=${TAG}" >> "$GITHUB_ENV"
 
       - name: Create release
         if: github.event_name == 'workflow_dispatch' || steps.meaningful.outputs.changed == 'true'
